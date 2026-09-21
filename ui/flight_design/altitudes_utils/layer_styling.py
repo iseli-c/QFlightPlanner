@@ -27,6 +27,7 @@ def prepare_and_style_layers(ui, pc_lay, photo_lay):
     photo_lay.setName('photos')
     pc_lay.setName('projection_centres')
 
-    add_to_canvas([pc_lay, flight_line, waypoints_layer, photo_lay], "flight_design", ui.design_run_counter)
+    add_to_canvas([pc_lay, flight_line, waypoints_layer, photo_lay], "flight_design", ui.design_run_counter,
+                  name=getattr(ui, 'flight_plan_name', None))
     ui.design_run_counter += 1
     ui.progressBar.setValue(100)

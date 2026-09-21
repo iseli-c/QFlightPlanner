@@ -3,18 +3,14 @@ from ....error_reporting import QgsPrint
 import numpy as np
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 from qgis.core import (
-    QgsVectorLayer,
     QgsFeature,
     QgsGeometry,
     QgsPointXY,
 )
-from pyproj import Transformer
 
-from ....mathgeo_utils.coordinates import (
-    transf_coord,
-)
+from ...dtm_window import DtmWindow
 
-from ....geoprocessing_utils import raster_minmax_in_vector, create_flight_line, create_waypoints, change_layer_style
+from ....geoprocessing_utils import create_flight_line, create_waypoints, change_layer_style
 
 
 class WorkerSeparate(QObject):
@@ -48,16 +44,21 @@ class WorkerSeparate(QObject):
             strips_count = int(self.layer.maximumValue(0))
             progress_c = 0
             step = int(strips_count // 1000)
-            feat_strip = QgsFeature()
 
             if (self.crs_rst is None or not self.crs_rst.isValid() or self.crs_rst.isGeographic() or
                 self.crs_vct is None or not self.crs_vct.isValid() or self.crs_vct.isGeographic()):
                 raise ValueError("CRS must be valid (not geographic).")
-            
-            if self.crs_rst != self.crs_vct:
-                transf_vct_rst = Transformer.from_crs(
-                    self.crs_vct, self.crs_rst, always_xy=True
-                )
+
+            photos_list = [
+                f.attributes()[:2] + [f.id(), f.geometry()]
+                for f in self.layer_pol.getFeatures()
+            ]
+            photos_list.sort(key=lambda x: x[1])
+
+            bbox = self.layer.extent()
+            bbox.combineExtentWith(self.layer_pol.extent())
+            bbox.grow(max(bbox.width(), bbox.height()) * 0.1 + 1.0)
+            window = DtmWindow.from_layer(self.DTM, bbox, bbox_crs=self.crs_vct)
 
             for t in range(1, strips_count + 1):
                 if self.killed:
@@ -65,12 +66,13 @@ class WorkerSeparate(QObject):
                     return
 
                 strip_nr = f"{t:04d}"
-                feats = self.layer.getFeatures(f'"Strip" = \'{strip_nr}\'')
                 nrP_max = 0
                 nrP_min = 1000000
                 BuffNr = None
+                kappa = 0.0
+                strip_feats = []
 
-                for f in feats:
+                for f in self.layer.getFeatures(f'"Strip" = \'{strip_nr}\''):
                     if self.killed:
                         self.handle_cancel()
                         return
@@ -79,15 +81,13 @@ class WorkerSeparate(QObject):
                     nrP_min = min(nrP_min, num)
                     if self.tab_widg_cor:
                         BuffNr = int(f.attribute('BuffNr'))
+                    kappa = float(f.attribute('Kappa [deg]'))
+                    point = f.geometry().asPoint()
+                    strip_feats.append((f.id(), point.x(), point.y()))
 
-                photos_list = [
-                    f.attributes()[:2] + [f.id(), f.geometry()]
-                    for f in self.layer_pol.getFeatures()
-                ]
-                photos_list.sort(key=lambda x: x[1])
                 strip_photos = [f for f in photos_list if int(f[0]) == t]
 
-                if not strip_photos:
+                if not strip_photos or not strip_feats:
                     continue
 
                 first_photo = strip_photos[0][-1].asPolygon()[0]
@@ -110,7 +110,6 @@ class WorkerSeparate(QObject):
                     QgsPointXY(pnt4[0], pnt4[1])
                 ]
                 g_strip = QgsGeometry.fromPolygonXY([one_strip])
-                kappa = float(f.attribute('Kappa [deg]'))
                 if kappa in [-90, 0, 90, 180]:
                     g_strip = QgsGeometry.fromPolygonXY([points])
                     g_strip = QgsGeometry.fromRect(g_strip.boundingBox())
@@ -126,35 +125,25 @@ class WorkerSeparate(QObject):
                         QgsPrint(f"Strip {t}: Intersection with Area of Interest is empty, using full strip geometry instead.")
                         common = g_strip
 
-                feat_strip.setGeometry(common)
-                common_lay = QgsVectorLayer("Polygon?crs=" + str(self.crs_vct), "row", "memory")
-                prov_com = common_lay.dataProvider()
-                prov_com.addFeature(feat_strip)
-
-                h_min, h_max = raster_minmax_in_vector(common_lay, self.DTM)
+                mask = window.mask_for_geometry(common, src_crs=self.crs_vct)
+                h_min, h_max = window.minmax(mask)
                 avg_terrain_height = h_max - (h_max - h_min) / 3
                 altitude_ASL = self.altitude_AGL + avg_terrain_height
 
+                xs = np.array([item[1] for item in strip_feats])
+                ys = np.array([item[2] for item in strip_feats])
+                terrain_heights = window.sample(xs, ys, src_crs=self.crs_vct)
+
                 self.layer.startEditing()
-                for k in range(nrP_min, nrP_max + 1):
+                for (feature_id, _, _), terrain_height in zip(strip_feats, terrain_heights):
                     if self.killed:
                         self.handle_cancel()
                         return
-                    photo_nr = f"{k:05d}"
-                    ph_nr_iter = self.layer.getFeatures(f'"Photo Number" = \'{photo_nr}\'')
-                    for f in ph_nr_iter:
-                        ph_nr = f.id()
-
-                        x = f.geometry().asPoint().x()
-                        y = f.geometry().asPoint().y()
-                        if self.crs_rst != self.crs_vct:
-                            x, y = transf_coord(transf_vct_rst, x, y)
-
-                        terrain_height, _ = self.DTM.dataProvider().sample(QgsPointXY(x, y), 1)
-                        altitude_AGL = altitude_ASL - terrain_height
-
-                        self.layer.changeAttributeValue(ph_nr, 5, round(altitude_AGL, 2))
-                        self.layer.changeAttributeValue(ph_nr, 4, round(altitude_ASL, 2))
+                    if np.isnan(terrain_height):
+                        continue
+                    altitude_AGL = altitude_ASL - terrain_height
+                    self.layer.changeAttributeValue(feature_id, 5, round(altitude_AGL, 2))
+                    self.layer.changeAttributeValue(feature_id, 4, round(altitude_ASL, 2))
                 self.layer.commitChanges()
 
                 progress_c += 1
@@ -199,7 +188,7 @@ class WorkerSeparate(QObject):
             self.progress.emit(0)
             self.enabled.emit(True)
             return
-            
+
         self.finished.emit(result, "flight_design")
         self.enabled.emit(True)
 

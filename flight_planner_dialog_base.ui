@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>563</width>
-    <height>621</height>
+    <height>669</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -17,13 +17,6 @@
    <property name="sizeConstraint">
     <enum>QLayout::SetFixedSize</enum>
    </property>
-   <item row="2" column="2">
-    <widget class="QPushButton" name="pushButtonDeleteCamera">
-     <property name="text">
-      <string>Delete Camera</string>
-     </property>
-    </widget>
-   </item>
    <item row="2" column="0">
     <widget class="QLabel" name="labelGuide">
      <property name="text">
@@ -34,81 +27,6 @@
      </property>
      <property name="openExternalLinks">
       <bool>true</bool>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="0">
-    <widget class="QLabel" name="labelCamera">
-     <property name="text">
-      <string>Select camera:</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="1">
-    <widget class="QPushButton" name="pushButtonSaveCamera">
-     <property name="text">
-      <string>Add Camera</string>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="1" colspan="2">
-    <widget class="QComboBox" name="comboBoxCamera">
-     <property name="currentText">
-      <string/>
-     </property>
-    </widget>
-   </item>
-   <item row="3" column="1" colspan="2">
-    <widget class="QgsMapLayerComboBox" name="mMapLayerComboBoxDTM"/>
-   </item>
-   <item row="3" column="0">
-    <widget class="QLabel" name="labelDTM">
-     <property name="layoutDirection">
-      <enum>Qt::LeftToRight</enum>
-     </property>
-     <property name="text">
-      <string>DTM:</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="4" column="0">
-    <widget class="QLabel" name="label">
-     <property name="enabled">
-      <bool>true</bool>
-     </property>
-     <property name="text">
-      <string>Result CRS:</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="4" column="1" colspan="2">
-    <widget class="QgsProjectionSelectionWidget" name="crsSelector" native="true"/>
-   </item>
-   <item row="1" column="4">
-    <widget class="QDoubleSpinBox" name="doubleSpinBoxFocalLength">
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-     <property name="suffix">
-      <string> [mm]</string>
-     </property>
-     <property name="decimals">
-      <number>1</number>
-     </property>
-     <property name="minimum">
-      <double>1.000000000000000</double>
-     </property>
-     <property name="maximum">
-      <double>999.899999999999977</double>
      </property>
     </widget>
    </item>
@@ -128,6 +46,19 @@
      </property>
     </widget>
    </item>
+   <item row="3" column="3">
+    <widget class="QLabel" name="labelPixelsAlongTrack">
+     <property name="text">
+      <string>Image Height</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="3" column="1" colspan="2">
+    <widget class="QgsMapLayerComboBox" name="mMapLayerComboBoxDTM"/>
+   </item>
    <item row="4" column="3">
     <widget class="QLabel" name="labelPixelsAcrossTrack">
      <property name="text">
@@ -142,6 +73,19 @@
     <widget class="QLabel" name="labelSensorSize">
      <property name="text">
       <string>Sensor Pixel Size</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="0">
+    <widget class="QLabel" name="label">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
+     <property name="text">
+      <string>Result CRS:</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -167,6 +111,82 @@
      </property>
     </widget>
    </item>
+   <item row="1" column="3">
+    <widget class="QLabel" name="labelFocalLength">
+     <property name="text">
+      <string>Focal Length</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QLabel" name="labelCamera">
+     <property name="text">
+      <string>Select camera:</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="1">
+    <widget class="QPushButton" name="pushButtonSaveCamera">
+     <property name="text">
+      <string>Add Camera</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="4">
+    <widget class="QDoubleSpinBox" name="doubleSpinBoxFocalLength">
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+     <property name="suffix">
+      <string> [mm]</string>
+     </property>
+     <property name="decimals">
+      <number>1</number>
+     </property>
+     <property name="minimum">
+      <double>1.000000000000000</double>
+     </property>
+     <property name="maximum">
+      <double>999.899999999999977</double>
+     </property>
+    </widget>
+   </item>
+   <item row="4" column="1" colspan="2">
+    <widget class="QgsProjectionSelectionWidget" name="crsSelector"/>
+   </item>
+   <item row="3" column="0">
+    <widget class="QLabel" name="labelDTM">
+     <property name="layoutDirection">
+      <enum>Qt::LeftToRight</enum>
+     </property>
+     <property name="text">
+      <string>DTM:</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item row="2" column="2">
+    <widget class="QPushButton" name="pushButtonDeleteCamera">
+     <property name="text">
+      <string>Delete Camera</string>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="1" colspan="2">
+    <widget class="QComboBox" name="comboBoxCamera">
+     <property name="currentText">
+      <string/>
+     </property>
+    </widget>
+   </item>
    <item row="2" column="4">
     <widget class="QDoubleSpinBox" name="doubleSpinBoxSensorSize">
      <property name="alignment">
@@ -183,26 +203,6 @@
      </property>
     </widget>
    </item>
-   <item row="1" column="3">
-    <widget class="QLabel" name="labelFocalLength">
-     <property name="text">
-      <string>Focal Length</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
-   <item row="3" column="3">
-    <widget class="QLabel" name="labelPixelsAlongTrack">
-     <property name="text">
-      <string>Image Height</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-     </property>
-    </widget>
-   </item>
    <item row="6" column="0" colspan="5">
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
@@ -213,64 +213,22 @@
        <string>Flight Design</string>
       </attribute>
       <layout class="QGridLayout" name="gridLayout_5">
-       <item row="8" column="2" alignment="Qt::AlignRight">
-        <widget class="QPushButton" name="pushButtonCancelDesign">
-         <property name="text">
-          <string>Cancel</string>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="0">
-        <widget class="QLabel" name="labelAltitudeType">
-         <property name="text">
-          <string>Altitude Type:</string>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="1">
-        <widget class="QLabel" name="labelExceedExtremeStrips">
-         <property name="text">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;First and Last Strip Exceed AoI&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="7" column="2">
-        <widget class="QPushButton" name="pushButtonRunDesign">
-         <property name="text">
-          <string>Run</string>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="1">
-        <widget class="QLabel" name="labelToleranceWaypoints">
-         <property name="text">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Terrain Following's Tolerance&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="7" column="0">
-        <widget class="QComboBox" name="comboBoxAltitudeType">
-         <property name="currentText">
-          <string/>
-         </property>
-        </widget>
-       </item>
-       <item row="5" column="2">
-        <widget class="QSpinBox" name="spinBoxExceedExtremeStrips">
+       <item row="8" column="1">
+        <widget class="QDoubleSpinBox" name="doubleSpinBoxMinHeight">
          <property name="alignment">
           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
          </property>
          <property name="suffix">
-          <string> [%]</string>
+          <string> [m]</string>
+         </property>
+         <property name="minimum">
+          <double>-10000.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>100000.000000000000000</double>
          </property>
          <property name="value">
-          <number>25</number>
+          <double>0.000000000000000</double>
          </property>
         </widget>
        </item>
@@ -283,110 +241,14 @@
           <string> [%]</string>
          </property>
          <property name="value">
-          <double>30.000000000000000</double>
+          <double>60.000000000000000</double>
          </property>
         </widget>
        </item>
-       <item row="4" column="2">
-        <widget class="QSpinBox" name="spinBoxMultipleBase">
-         <property name="alignment">
-          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-         </property>
-         <property name="maximum">
-          <number>99</number>
-         </property>
-         <property name="value">
-          <number>2</number>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="2">
-        <widget class="QDoubleSpinBox" name="doubleSpinBoxTolerance">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-         </property>
-         <property name="prefix">
-          <string>± </string>
-         </property>
-         <property name="suffix">
-          <string> [m]</string>
-         </property>
-         <property name="decimals">
-          <number>1</number>
-         </property>
-         <property name="minimum">
-          <double>0.100000000000000</double>
-         </property>
-         <property name="maximum">
-          <double>999.899999999999977</double>
-         </property>
-        </widget>
-       </item>
-       <item row="4" column="1">
-        <widget class="QLabel" name="labelMultipleBase">
+       <item row="5" column="1">
+        <widget class="QLabel" name="labelExceedExtremeStrips">
          <property name="text">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Multiple of Base Exceed AoI&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QRadioButton" name="radioButtonAltAGL">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="layoutDirection">
-          <enum>Qt::RightToLeft</enum>
-         </property>
-         <property name="text">
-          <string>Alt. Above Ground Level</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="2">
-        <widget class="QDoubleSpinBox" name="doubleSpinBoxAltAGL">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-         </property>
-         <property name="suffix">
-          <string> [m]</string>
-         </property>
-         <property name="decimals">
-          <number>1</number>
-         </property>
-         <property name="minimum">
-          <double>0.100000000000000</double>
-         </property>
-         <property name="maximum">
-          <double>9999999.900000000372529</double>
-         </property>
-         <property name="value">
-          <double>500.000000000000000</double>
-         </property>
-        </widget>
-       </item>
-       <item row="3" column="1">
-        <widget class="QLabel" name="labelSidelap">
-         <property name="text">
-          <string>Side Overlap</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="2" column="1">
-        <widget class="QLabel" name="labelOverlap">
-         <property name="text">
-          <string>Front Overlap</string>
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;First and Last Strip Exceed AoI&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -402,7 +264,14 @@
           <string> [%]</string>
          </property>
          <property name="value">
-          <double>60.000000000000000</double>
+          <double>80.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="0">
+        <widget class="QLabel" name="labelAltitudeType">
+         <property name="text">
+          <string>Altitude Type:</string>
          </property>
         </widget>
        </item>
@@ -416,17 +285,7 @@
            <string>Block</string>
           </attribute>
           <layout class="QGridLayout" name="gridLayout">
-           <item row="0" column="0" colspan="2">
-            <widget class="QLabel" name="labelAoI">
-             <property name="text">
-              <string>Area of Interest (AoI)</string>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="0" colspan="2">
-            <widget class="QgsMapLayerComboBox" name="mMapLayerComboBoxAoI"/>
-           </item>
-           <item row="2" column="0" rowspan="2">
+           <item row="2" column="0" rowspan="3">
             <widget class="QDial" name="dial">
              <property name="minimum">
               <number>0</number>
@@ -454,6 +313,26 @@
              </property>
             </widget>
            </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="labelAoI">
+             <property name="text">
+              <string>Area of Interest (AoI)</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QCheckBox" name="checkBoxSelectedOnly">
+             <property name="layoutDirection">
+              <enum>Qt::RightToLeft</enum>
+             </property>
+             <property name="text">
+              <string>Selected features only</string>
+             </property>
+             <property name="toolTip">
+              <string>Use only the features selected in the AoI layer. At least one feature must be selected.</string>
+             </property>
+            </widget>
+           </item>
            <item row="2" column="1">
             <widget class="QLabel" name="labelFlightDirection">
              <property name="text">
@@ -461,7 +340,10 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="1">
+           <item row="1" column="0" colspan="2">
+            <widget class="QgsMapLayerComboBox" name="mMapLayerComboBoxAoI"/>
+           </item>
+           <item row="4" column="1">
             <widget class="QSpinBox" name="spinBoxDirection">
              <property name="wrapping">
               <bool>true</bool>
@@ -474,6 +356,36 @@
              </property>
              <property name="maximum">
               <number>359</number>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QPushButton" name="pushButtonDrawDirection">
+             <property name="text">
+              <string>Draw Direction</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0" colspan="2">
+            <widget class="QCheckBox" name="checkBoxLivePreview">
+             <property name="text">
+              <string>Live preview</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0" colspan="2">
+            <widget class="QCheckBox" name="checkBoxPreviewAdaptive">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>Adaptive spacing in preview</string>
+             </property>
+             <property name="toolTip">
+              <string>Apply terrain-adaptive line/photo spacing in the live preview (slower). Only used when the adaptive overlap option is checked.</string>
              </property>
             </widget>
            </item>
@@ -534,6 +446,104 @@
          </widget>
         </widget>
        </item>
+       <item row="13" column="0" colspan="3">
+        <widget class="QgsCollapsibleGroupBox" name="mGroupBox">
+         <property name="title">
+          <string>More settings*</string>
+         </property>
+         <property name="collapsed">
+          <bool>false</bool>
+         </property>
+         <property name="scrollOnExpand">
+          <bool>false</bool>
+         </property>
+         <property name="saveCollapsedState">
+          <bool>false</bool>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_3"/>
+        </widget>
+       </item>
+       <item row="4" column="2">
+        <widget class="QSpinBox" name="spinBoxMultipleBase">
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="maximum">
+          <number>99</number>
+         </property>
+         <property name="value">
+          <number>2</number>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLabel" name="labelMultipleBase">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Multiple of Base Exceed AoI&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0">
+        <widget class="QComboBox" name="comboBoxAltitudeType">
+         <property name="currentText">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="1">
+        <widget class="QDoubleSpinBox" name="doubleSpinBoxMaxHeight">
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="suffix">
+          <string> [m]</string>
+         </property>
+         <property name="minimum">
+          <double>-10000.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>100000.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="2">
+        <widget class="QDoubleSpinBox" name="doubleSpinBoxTolerance">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="prefix">
+          <string>± </string>
+         </property>
+         <property name="suffix">
+          <string> [m]</string>
+         </property>
+         <property name="decimals">
+          <number>1</number>
+         </property>
+         <property name="minimum">
+          <double>0.100000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>999.899999999999977</double>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="1">
+        <widget class="QPushButton" name="pushButtonRunDesign">
+         <property name="text">
+          <string>Run</string>
+         </property>
+        </widget>
+       </item>
        <item row="0" column="1">
         <widget class="QRadioButton" name="radioButtonGSD">
          <property name="layoutDirection">
@@ -544,6 +554,13 @@
          </property>
          <property name="checked">
           <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0">
+        <widget class="QLabel" name="labelMinHeight">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Terrain Minimum Height&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
          </property>
         </widget>
        </item>
@@ -565,11 +582,99 @@
           <double>99.900000000000006</double>
          </property>
          <property name="value">
-          <double>5.000000000000000</double>
+          <double>10.000000000000000</double>
          </property>
         </widget>
        </item>
-       <item row="7" column="1">
+       <item row="2" column="1">
+        <widget class="QLabel" name="labelOverlap">
+         <property name="text">
+          <string>Front Overlap</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QLabel" name="labelSidelap">
+         <property name="text">
+          <string>Side Overlap</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="0">
+        <widget class="QLabel" name="labelMaxHeight">
+         <property name="text">
+          <string>Terrain Maximum Height</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1">
+        <widget class="QLabel" name="labelToleranceWaypoints">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Terrain Following's Tolerance&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QRadioButton" name="radioButtonAltAGL">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="layoutDirection">
+          <enum>Qt::RightToLeft</enum>
+         </property>
+         <property name="text">
+          <string>Alt. Above Ground Level</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="2">
+        <widget class="QSpinBox" name="spinBoxExceedExtremeStrips">
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="suffix">
+          <string> [%]</string>
+         </property>
+         <property name="value">
+          <number>25</number>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="2">
+        <widget class="QDoubleSpinBox" name="doubleSpinBoxAltAGL">
+         <property name="enabled">
+          <bool>false</bool>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+         </property>
+         <property name="suffix">
+          <string> [m]</string>
+         </property>
+         <property name="decimals">
+          <number>1</number>
+         </property>
+         <property name="minimum">
+          <double>0.100000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>9999999.900000000372529</double>
+         </property>
+         <property name="value">
+          <double>500.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="2">
         <widget class="QProgressBar" name="progressBar">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -591,89 +696,24 @@
          </property>
         </widget>
        </item>
-       <item row="9" column="0" colspan="3">
-        <widget class="QgsCollapsibleGroupBox" name="mGroupBox">
-         <property name="title">
-          <string>More settings*</string>
+       <item row="12" column="1">
+        <widget class="QPushButton" name="pushButtonCancelDesign">
+         <property name="text">
+          <string>Cancel</string>
          </property>
-         <property name="collapsed" stdset="0">
-          <bool>true</bool>
+        </widget>
+       </item>
+       <item row="10" column="1" colspan="2">
+        <widget class="QCheckBox" name="checkBoxIncreaseOverlap">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>30</height>
+          </size>
          </property>
-         <property name="scrollOnExpand" stdset="0">
-          <bool>false</bool>
+         <property name="text">
+          <string>Adapt line/photo spacing to local terrain (maintain minimum front/side overlap)</string>
          </property>
-         <property name="saveCollapsedState" stdset="0">
-          <bool>false</bool>
-         </property>
-         <layout class="QGridLayout" name="gridLayout_3">
-          <item row="0" column="0">
-           <widget class="QLabel" name="labelMinHeight">
-            <property name="text">
-             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Terrain Minimum Height&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="doubleSpinBoxMinHeight">
-            <property name="alignment">
-             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-            </property>
-            <property name="suffix">
-             <string> [m]</string>
-            </property>
-            <property name="minimum">
-             <double>-10000.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>100000.000000000000000</double>
-            </property>
-            <property name="value">
-             <double>0.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="2">
-           <widget class="QCheckBox" name="checkBoxIncreaseOverlap">
-            <property name="text">
-             <string>Increase front/side overlap due to
-min and max terrain's height</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="labelMaxHeight">
-            <property name="text">
-             <string>Terrain Maximum Height</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QDoubleSpinBox" name="doubleSpinBoxMaxHeight">
-            <property name="alignment">
-             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-            </property>
-            <property name="suffix">
-             <string> [m]</string>
-            </property>
-            <property name="minimum">
-             <double>-10000.000000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>100000.000000000000000</double>
-            </property>
-            <property name="value">
-             <double>0.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QPushButton" name="pushButtonGetHeights">
-            <property name="text">
-             <string>Get Heights from DTM</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
         </widget>
        </item>
       </layout>
@@ -904,7 +944,7 @@ min and max terrain's height</string>
   <customwidget>
    <class>QgsProjectionSelectionWidget</class>
    <extends>QWidget</extends>
-   <header>qgis.gui</header>
+   <header>qgsprojectionselectionwidget.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

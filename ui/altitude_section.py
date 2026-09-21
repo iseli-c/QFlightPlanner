@@ -140,9 +140,11 @@ class AltitudeSectionHandler:
     def _enable_more_settings_groupbox(self, enable: bool):
         """Enable/Disable Get Heights section"""
         self.dialog.checkBoxIncreaseOverlap.setEnabled(enable)
-        self.dialog.pushButtonGetHeights.setEnabled(enable)
         self.dialog.doubleSpinBoxMaxHeight.setEnabled(enable)
         self.dialog.doubleSpinBoxMinHeight.setEnabled(enable)
         self.dialog.labelMaxHeight.setEnabled(enable)
         self.dialog.labelMinHeight.setEnabled(enable)
+        if hasattr(self.dialog, 'checkBoxPreviewAdaptive'):
+            self.dialog.checkBoxPreviewAdaptive.setEnabled(
+                enable and self.dialog.checkBoxIncreaseOverlap.isChecked())
 

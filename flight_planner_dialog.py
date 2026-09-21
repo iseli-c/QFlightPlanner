@@ -26,16 +26,25 @@ from qgis.PyQt import QtWidgets, uic
 from .ui.camera_section import CameraSectionHandler
 from .ui.altitude_section import AltitudeSectionHandler
 from .ui.terrain_section import TerrainSectionHandler
-from .ui.direction_section import DirectionSectionHandler
+from .ui.direction_section import DirectionSectionHandler, DirectionMapTool
 import os
 from .error_reporting import QgsPrint, QgsTraceback, QgsMessBox
-from .geoprocessing_utils import add_to_canvas, find_matching_field
+from .geoprocessing_utils import (
+    add_to_canvas,
+    find_matching_field,
+    change_layer_style,
+    selected_features_subset,
+)
 from osgeo import gdal
 from qgis.core import (
     QgsMapLayerProxyModel, 
     QgsFieldProxyModel, 
     QgsCoordinateReferenceSystem, 
     QgsProject,
+    QgsRasterLayer,
+    QgsVectorLayer,
+    QgsFeature,
+    QgsGeometry,
     Qgis
 )
 from .ui.flight_design.one_altitude.run_design import run_design_one_altitude
@@ -43,7 +52,9 @@ from .ui.flight_design.separate_altitude.run_design import run_design_separate_a
 from .ui.flight_design.terrain_following.run_design import run_design_terrain_following
 from .ui.flight_design.separate_altitude.worker import WorkerSeparate
 from .ui.flight_design.terrain_following.worker import WorkerTerrain
-from qgis.PyQt.QtCore import QThread
+from .ui.flight_design.design_inputs import DesignInputs
+from .ui.flight_design.preview_worker import WorkerPreview
+from qgis.PyQt.QtCore import QThread, QTimer, Qt
 from qgis.PyQt import QtWidgets
 from .ui.quality_control.worker import WorkerControl
 
@@ -51,10 +62,15 @@ FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'flight_planner_dialog_base.ui'))
 
 class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
-    def __init__(self, parent=None):
+    def __init__(self, iface=None, parent=None):
         if Qgis.QGIS_VERSION_INT < 33800:
             gdal.UseExceptions()
         super().__init__(parent)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.iface = iface
+        self._previous_map_tool = None
+        self._direction_tool = None
+        self._aoi_selection_layer = None
         self.setupUi(self)
         self.tabWidget.setCurrentIndex(0)
         """Hide Cancel button"""
@@ -87,9 +103,33 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
         self.altitude_handler.setup()
 
         self.terrain_handler = TerrainSectionHandler(self)
-        self.pushButtonGetHeights.clicked.connect(lambda _: self.terrain_handler.on_btn_get_heights_clicked())
+        self.doubleSpinBoxBuffer.valueChanged.connect(self.terrain_handler.refresh_heights)
 
         self.direction_handler = DirectionSectionHandler(self.dial, self.spinBoxDirection)
+        self.pushButtonDrawDirection.clicked.connect(self.on_pushButtonDrawDirection_clicked)
+
+        """Interactive flight direction preview"""
+        self._preview_photos = None
+        self._preview_lines = None
+        self._preview_group = None
+        self._preview_worker = None
+        self._preview_thread = None
+        self._preview_pending = False
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(250)
+        self._preview_timer.timeout.connect(self.update_preview)
+        self.spinBoxDirection.valueChanged.connect(self.schedule_preview)
+        for widget in (self.doubleSpinBoxGSD, self.doubleSpinBoxOverlap,
+                       self.doubleSpinBoxSidelap, self.spinBoxExceedExtremeStrips,
+                       self.spinBoxMultipleBase):
+            widget.valueChanged.connect(self.schedule_preview)
+        if hasattr(self, 'checkBoxLivePreview'):
+            self.checkBoxLivePreview.toggled.connect(self.on_live_preview_toggled)
+        if hasattr(self, 'checkBoxPreviewAdaptive'):
+            self.checkBoxPreviewAdaptive.toggled.connect(self.schedule_preview)
+        self.checkBoxIncreaseOverlap.toggled.connect(self.on_increase_overlap_toggled)
+        self.checkBoxSelectedOnly.toggled.connect(self.on_aoi_selection_mode_toggled)
         
         """Fill Altitude Type combobox"""
         self.comboBoxAltitudeType.addItems(["One Altitude ASL For Entire Flight",
@@ -116,6 +156,7 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
         self.mFieldComboBoxPhi.setFilters(QgsFieldProxyModel.Numeric)
         self.mFieldComboBoxKappa.setFilters(QgsFieldProxyModel.Numeric)
         self.mMapLayerComboBoxDTM.setFilters(QgsMapLayerProxyModel.RasterLayer)
+        self._setup_dtm_filter()
         self.mMapLayerComboBoxAoI.setFilters(QgsMapLayerProxyModel.PolygonLayer)
         self.mMapLayerComboBoxCorridor.setFilters(QgsMapLayerProxyModel.LineLayer)
         
@@ -139,6 +180,21 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
         if self.tabWidget.currentIndex() == 1:
             self.on_mMapLayerComboBoxProjectionCentres_layerChanged()
     
+    def _setup_dtm_filter(self):
+        """Allow only single channel rasters (no WMS) in the DTM combobox"""
+        self.mMapLayerComboBoxDTM.setExcludedProviders(['wms'])
+        self._update_dtm_excluded_layers()
+        QgsProject.instance().layersAdded.connect(self._update_dtm_excluded_layers)
+        QgsProject.instance().layersRemoved.connect(self._update_dtm_excluded_layers)
+
+    def _update_dtm_excluded_layers(self, *args):
+        """Exclude every raster that is not single channel from the DTM combobox"""
+        excepted = [
+            layer for layer in QgsProject.instance().mapLayers().values()
+            if isinstance(layer, QgsRasterLayer) and layer.bandCount() != 1
+        ]
+        self.mMapLayerComboBoxDTM.setExceptedLayerList(excepted)
+    
     def on_mMapLayerComboBoxDTM_layerChanged(self):
         """Handle change of DTM layer"""
         lyr = self.mMapLayerComboBoxDTM.currentLayer()
@@ -149,17 +205,56 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
                 self.terrain_handler.set_dtm(lyr, self.raster)
             except Exception:
                 QgsTraceback()
+        else:
+            self.terrain_handler.set_dtm(None, None)
+        self.terrain_handler.refresh_heights()
 
     def on_mMapLayerComboBoxAoI_layerChanged(self):
-        """Handle change of AoI layer"""
-        lyr = self.mMapLayerComboBoxAoI.currentLayer()
+        """Handle change of AoI layer or of its feature selection"""
+        source = self.mMapLayerComboBoxAoI.currentLayer()
+        self._connect_aoi_selection_signal(source)
+        lyr = self.effective_aoi_layer()
         self.AreaOfInterest = lyr
         if lyr:
-            features = lyr.getFeatures()
-            for feature in features:
+            feature = next(iter(lyr.getFeatures()), None)
+            if feature is not None:
                 self.geom_AoI = feature.geometry()
-                break
             self.terrain_handler.set_aoi(lyr)
+        else:
+            self.terrain_handler.set_aoi(None)
+        self.terrain_handler.refresh_heights()
+        self.schedule_preview()
+
+    def effective_aoi_layer(self):
+        """Return the AoI layer, limited to selected features when requested.
+
+        Returns None when "Selected features only" is checked and nothing is
+        selected.
+        """
+        layer = self.mMapLayerComboBoxAoI.currentLayer()
+        if (layer is not None
+                and getattr(self, 'checkBoxSelectedOnly', None) is not None
+                and self.checkBoxSelectedOnly.isChecked()):
+            return selected_features_subset(layer)
+        return layer
+
+    def _connect_aoi_selection_signal(self, layer):
+        """Keep the AoI selection in sync with the currently chosen layer."""
+        if layer is self._aoi_selection_layer:
+            return
+        if self._aoi_selection_layer is not None:
+            try:
+                self._aoi_selection_layer.selectionChanged.disconnect(
+                    self.on_mMapLayerComboBoxAoI_layerChanged)
+            except (TypeError, RuntimeError):
+                pass
+        self._aoi_selection_layer = layer
+        if layer is not None:
+            layer.selectionChanged.connect(self.on_mMapLayerComboBoxAoI_layerChanged)
+
+    def on_aoi_selection_mode_toggled(self, checked):
+        """Recompute AoI-dependent data when the selection mode changes."""
+        self.on_mMapLayerComboBoxAoI_layerChanged()
 
     def on_mMapLayerComboBoxCorridor_layerChanged(self):
         """Handle change of Corridor line layer"""
@@ -170,6 +265,8 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
             self.terrain_handler.set_corridor_line(lyr)
         else:
             self.pathLine = None
+            self.terrain_handler.set_corridor_line(None)
+        self.terrain_handler.refresh_heights()
 
     def on_tabWidgetBlockCorridor_currentChanged(self):
         """Handle tab change (Block / Corridor)"""
@@ -179,11 +276,175 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
         else:
             self.tabBlock = False
             self.tabCorridor = True
+        self.terrain_handler.refresh_heights()
 
     def on_tabWidget_changed(self):
         """Handle tab change (Flight Design / Quality Control)"""
         if self.tabWidget.currentIndex() == 1:
             self.on_mMapLayerComboBoxProjectionCentres_layerChanged()
+
+    def on_pushButtonDrawDirection_clicked(self):
+        """Activate the map tool used to draw the flight direction."""
+        if not self.iface or not self.iface.mapCanvas():
+            return
+        canvas = self.iface.mapCanvas()
+        if self._direction_tool and canvas.mapTool() is self._direction_tool:
+            return
+        self._previous_map_tool = canvas.mapTool()
+        self._direction_tool = DirectionMapTool(
+            canvas, self._direction_crs(), self._previous_map_tool)
+        self._direction_tool.directionPicked.connect(self.on_direction_picked)
+        self._direction_tool.directionDragging.connect(self.schedule_preview)
+        canvas.setMapTool(self._direction_tool)
+
+    def _direction_crs(self):
+        """Return the CRS in which the drawn direction should be interpreted."""
+        return QgsCoordinateReferenceSystem(self.epsg_code)
+
+    def on_direction_picked(self, direction):
+        """Set the flight direction from the azimuth of the drawn segment."""
+        self.spinBoxDirection.setValue(direction)
+
+    def schedule_preview(self, *args):
+        """Debounce preview recomputation triggered by direction changes."""
+        if self.tabCorridor:
+            return
+        if not hasattr(self, 'checkBoxLivePreview') or not self.checkBoxLivePreview.isChecked():
+            return
+        self._preview_timer.start()
+
+    def on_live_preview_toggled(self, checked):
+        """Enable or clear the live preview."""
+        if checked:
+            self.schedule_preview()
+        else:
+            self._preview_timer.stop()
+            self._clear_preview()
+
+    def on_increase_overlap_toggled(self, checked):
+        """Keep the adaptive-preview option usable only with adaptive overlap."""
+        if hasattr(self, 'checkBoxPreviewAdaptive'):
+            self.checkBoxPreviewAdaptive.setEnabled(checked)
+        self.schedule_preview()
+
+    def update_preview(self):
+        """Run a background preview computation for the current direction."""
+        if self._preview_thread is not None and self._preview_thread.isRunning():
+            self._preview_pending = True
+            return
+
+        try:
+            inputs = DesignInputs.from_ui(self)
+        except ValueError:
+            self._clear_preview()
+            return
+
+        worker = WorkerPreview(inputs, self.spinBoxDirection.value())
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        worker.finished.connect(self._on_preview_finished)
+        worker.error.connect(self._on_preview_error)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.started.connect(worker.run)
+        thread.start()
+
+        self._preview_worker = worker
+        self._preview_thread = thread
+
+    def _on_preview_finished(self, pc_layer, photo_layer):
+        self._cleanup_preview_thread()
+        self._render_preview(pc_layer, photo_layer)
+        if self._preview_pending:
+            self._preview_pending = False
+            self.update_preview()
+
+    def _on_preview_error(self, exception, traceback_str):
+        self._cleanup_preview_thread()
+        QgsPrint(str(exception), level="Warning")
+        if self._preview_pending:
+            self._preview_pending = False
+            self.update_preview()
+
+    def _cleanup_preview_thread(self):
+        if self._preview_thread is not None:
+            self._preview_thread.quit()
+            self._preview_thread.wait()
+            self._preview_thread = None
+        self._preview_worker = None
+
+    def _ensure_preview_layers(self):
+        if self._preview_photos is not None:
+            return
+        photos = QgsVectorLayer("Polygon?crs=" + self.epsg_code, "Flight preview - photos", "memory")
+        lines = QgsVectorLayer("LineString?crs=" + self.epsg_code, "Flight preview - lines", "memory")
+        change_layer_style(photos, {'color': '54,150,255,40', 'color_border': '#1f6fc4', 'width_border': '0.2'})
+        change_layer_style(lines, {'color': '#d9534f', 'width': '0.6'})
+        root = QgsProject.instance().layerTreeRoot()
+        self._preview_group = root.insertGroup(0, "Flight preview")
+        QgsProject.instance().addMapLayers([lines, photos], False)
+        self._preview_group.addLayer(lines)
+        self._preview_group.addLayer(photos)
+        self._preview_photos = photos
+        self._preview_lines = lines
+
+    def _render_preview(self, pc_layer, photo_layer):
+        """Update the persistent preview layers in place."""
+        self._ensure_preview_layers()
+
+        photos_provider = self._preview_photos.dataProvider()
+        photos_provider.truncate()
+        photos_provider.addFeatures(self._geometry_features(photo_layer))
+
+        lines_provider = self._preview_lines.dataProvider()
+        lines_provider.truncate()
+        lines_provider.addFeatures(self._build_preview_lines(pc_layer))
+
+        self._preview_photos.triggerRepaint()
+        self._preview_lines.triggerRepaint()
+
+    @staticmethod
+    def _geometry_features(layer):
+        features = []
+        for feature in layer.getFeatures():
+            new_feature = QgsFeature()
+            new_feature.setGeometry(feature.geometry())
+            features.append(new_feature)
+        return features
+
+    def _build_preview_lines(self, pc_layer):
+        strips = {}
+        for feature in pc_layer.getFeatures():
+            strip = str(feature.attribute('Strip'))
+            strips.setdefault(strip, []).append(
+                (int(feature.attribute('Photo Number')), feature.geometry().asPoint()))
+
+        lines = []
+        for points in strips.values():
+            points.sort(key=lambda item: item[0])
+            coordinates = [point for _, point in points]
+            if len(coordinates) < 2:
+                continue
+            feature = QgsFeature()
+            feature.setGeometry(QgsGeometry.fromPolylineXY(coordinates))
+            lines.append(feature)
+        return lines
+
+    def _clear_preview(self):
+        for layer in (self._preview_photos, self._preview_lines):
+            if layer is not None:
+                layer.dataProvider().truncate()
+                layer.triggerRepaint()
+
+    def closeEvent(self, event):
+        """Release the direction map tool if it is still active."""
+        canvas = self.iface.mapCanvas() if self.iface else None
+        if canvas and self._direction_tool and canvas.mapTool() is self._direction_tool:
+            canvas.setMapTool(self._previous_map_tool)
+        if hasattr(self, '_preview_timer'):
+            self._preview_timer.stop()
+            self._cleanup_preview_thread()
+        super().closeEvent(event)
 
     def on_pushButtonRunDesign_clicked(self):
         """Start proper type of altitude after clicking Run button"""
@@ -197,18 +458,31 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
 
         self.DTM = self.mMapLayerComboBoxDTM.currentLayer()
 
-        if self.tabBlock:
-            self.AreaOfInterest = self.mMapLayerComboBoxAoI.currentLayer()
-        elif self.tabCorridor:
-            self.CorLine = self.mMapLayerComboBoxCorridor.currentLayer()
-
         if not self.DTM:
             QgsMessBox('Missing Data', 'Please select a DTM layer.')
             return
-        
+
+        if self.tabBlock:
+            source = self.mMapLayerComboBoxAoI.currentLayer()
+            if (source is not None and self.checkBoxSelectedOnly.isChecked()
+                    and not source.selectedFeatureIds()):
+                QgsMessBox('No features selected',
+                           'Select at least one feature in the AoI layer '
+                           'or uncheck "Selected features only".')
+                return
+            self.AreaOfInterest = self.effective_aoi_layer()
+        elif self.tabCorridor:
+            self.CorLine = self.mMapLayerComboBoxCorridor.currentLayer()
+
         if (self.tabBlock and not self.AreaOfInterest) or (self.tabCorridor and not self.CorLine):
             QgsMessBox('Missing Data', 'Please select a Vector layer (AoI or Corridor).')
             return
+
+        flight_plan_name = self.ask_flight_plan_name()
+        if flight_plan_name is None:
+            return
+        self.flight_plan_name = flight_plan_name
+
         altitude_type = self.comboBoxAltitudeType.currentText()
         try:
             if altitude_type == 'One Altitude ASL For Entire Flight':
@@ -219,8 +493,30 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
                 run_design_terrain_following(self)
         except Exception:
             QgsTraceback()
+            QgsMessBox('Flight design failed',
+                       'Flight design could not be completed.\n'
+                       'See the QFlightPlanner messages in the QGIS Log Messages panel for details.',
+                       level='Critical')
             self.pushButtonCancelDesign.setVisible(False)
+            self.pushButtonRunDesign.setEnabled(True)
     
+    def ask_flight_plan_name(self):
+        """Prompt for a flight plan name, defaulting to the AoI/Corridor layer name."""
+        default_name = ""
+        if self.tabBlock and self.AreaOfInterest:
+            default_name = self.AreaOfInterest.name()
+        elif self.tabCorridor and self.CorLine:
+            default_name = self.CorLine.name()
+
+        name, ok = QtWidgets.QInputDialog.getText(
+            self, 'Flight Plan Name', 'Enter a name for the flight plan:',
+            text=default_name)
+        if not ok:
+            return None
+
+        name = name.strip()
+        return name or default_name or 'flight_design'
+
     def validate_crs(self, crs):
         if crs.isGeographic():
             QgsMessBox('Coordinate Reference System', 'Geographic Coordinate Systems are not supported.\n' \
@@ -276,7 +572,8 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
 
         if result is not None:
             if group_name == 'flight_design':
-                add_to_canvas(result, group_name, self.design_run_counter)
+                add_to_canvas(result, group_name, self.design_run_counter,
+                              name=getattr(self, 'flight_plan_name', None))
                 self.design_run_counter += 1
 
         self.pushButtonRunDesign.setEnabled(True)
@@ -286,6 +583,7 @@ class FlightPlannerDialog(QtWidgets.QDialog, FORM_CLASS):
         """Handle errors in Workers"""
         QgsPrint(str(exception), level="Critical")
         QgsPrint(traceback_str, level="Critical")
+        QgsMessBox('Flight design failed', str(exception), level='Critical')
         self.pushButtonRunDesign.setEnabled(True)
 
     def cancel_worker(self, which):

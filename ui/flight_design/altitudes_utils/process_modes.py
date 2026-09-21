@@ -2,33 +2,109 @@ from math import atan, pi, fabs, sqrt, atan2
 from ....mathgeo_utils.algebra import bounding_box_at_angle
 from ....mathgeo_utils.coordinates import line
 from .projection_centres import strips_projection_centres_number, projection_centres
+from .adaptive_layout import plan_adaptive_layout, corridor_factor
 from ._annotation import annotate_segment_features
 from ....error_reporting import QgsPrint, QgsMessBox
+from ...dtm_window import DtmWindow
 from qgis import processing
 from qgis.core import QgsField, QgsCoordinateReferenceSystem, Qgis
 from qgis.PyQt.QtCore import QMetaType, QVariant
 
-def process_block_mode(ui, Bx, By, len_along, len_across, altitude_ASL):
+def direction_to_angle(direction):
+    """Convert a compass direction (degrees) into the internal bounding-box angle."""
+    angle = 90 - direction
+    if angle < 0:
+        angle += 360
+    return angle
+
+
+def compute_design_geometry(angle, aoi_geom, crs_vct, Bx, By, len_along, len_across,
+                            exceed, multiple_base, altitude_ASL, adaptive_plan=None):
+    """Compute projection centres and photos for a block flight at a given angle."""
+    a, b, a2, b2, Dx, Dy = bounding_box_at_angle(angle, aoi_geom)
+
+    pc_lay, photo_lay, _, _ = projection_centres(
+        angle, aoi_geom, crs_vct, a, b, a2, b2, Dx, Dy,
+        Bx, By, len_along, len_across,
+        exceed, multiple_base, altitude_ASL, 0, 0,
+        adaptive_plan=adaptive_plan
+    )
+    return pc_lay, photo_lay
+
+
+def _plan_block_layout(ui, angle, aoi_geom, a, b, a2, b2, Dx, Dy,
+                       len_along, len_across, altitude_ASL, altitude_AGL):
+    """Build the terrain-adaptive plan for a block design, or abort the design."""
+    diagonal = sqrt(len_along ** 2 + len_across ** 2)
+    margin = diagonal * (2 + ui.spinBoxExceedExtremeStrips.value())
+    bbox = aoi_geom.boundingBox()
+    bbox.grow(margin)
+    try:
+        window = DtmWindow.from_layer(ui.DTM, bbox, bbox_crs=ui.crs_vct)
+        return plan_adaptive_layout(
+            window, aoi_geom, ui.crs_vct, angle, a, b, a2, b2, Dx, Dy,
+            len_along, len_across, ui.p, ui.q, altitude_ASL, altitude_AGL,
+            ui.spinBoxExceedExtremeStrips.value(), ui.spinBoxMultipleBase.value()
+        )
+    except ValueError as e:
+        QgsMessBox('Terrain-adaptive overlap', str(e), level='Critical')
+        ui.progressBar.setValue(0)
+        return None
+
+
+def _corridor_factor(ui, buffered_exp_lines, altitude_ASL, altitude_AGL):
+    """Uniform spacing factor from the highest terrain under the corridor buffer."""
+    geometry = None
+    for feature in buffered_exp_lines.getFeatures():
+        geom = feature.geometry()
+        geometry = geom if geometry is None else geometry.combine(geom)
+    if geometry is None or geometry.isEmpty():
+        return 1.0
+
+    window = DtmWindow.from_layer(
+        ui.DTM, geometry.boundingBox(), bbox_crs=ui.crs_vct)
+    mask = window.mask_for_geometry(geometry, src_crs=ui.crs_vct)
+    try:
+        z_star = window.minmax(mask)[1]
+    except ValueError:
+        return 1.0
+
+    try:
+        return corridor_factor(z_star, altitude_ASL, altitude_AGL)
+    except ValueError as e:
+        QgsMessBox('Terrain-adaptive overlap', str(e), level='Critical')
+        ui.progressBar.setValue(0)
+        return None
+
+
+def process_block_mode(ui, Bx, By, len_along, len_across, altitude_ASL,
+                       altitude_AGL=None):
     """Get projection centres and photos layer from AoI"""
     if ui.AreaOfInterest and ui.AreaOfInterest.crs().isValid():
         ui.crs_vct = ui.AreaOfInterest.crs()
     else:
         ui.crs_rst = QgsCoordinateReferenceSystem(ui.epsg_code)
         QgsMessBox('AoI CRS Error', f'Your AoI has no valid CRS.\n{ui.epsg_code} set.')
-    
+
     feature = list(ui.AreaOfInterest.getFeatures())[0]
     ui.aoi_geom = feature.geometry()
 
-    angle = 90 - ui.spinBoxDirection.value()
-    if angle < 0:
-        angle += 360
-    a, b, a2, b2, Dx, Dy = bounding_box_at_angle(angle, ui.aoi_geom)
+    angle = direction_to_angle(ui.spinBoxDirection.value())
+    aoi_geom = ui.aoi_geom
+    a, b, a2, b2, Dx, Dy = bounding_box_at_angle(angle, aoi_geom)
 
-    pc_lay, photo_lay, _, _ = projection_centres(
-        angle, ui.aoi_geom, ui.crs_vct, a, b, a2, b2, Dx, Dy,
-        Bx, By, len_along, len_across,
-        ui.spinBoxExceedExtremeStrips.value(),
-        ui.spinBoxMultipleBase.value(), altitude_ASL, 0, 0
+    adaptive_plan = None
+    if ui.checkBoxIncreaseOverlap.isChecked() and altitude_AGL is not None:
+        adaptive_plan = _plan_block_layout(
+            ui, angle, aoi_geom, a, b, a2, b2, Dx, Dy,
+            len_along, len_across, altitude_ASL, altitude_AGL)
+        if adaptive_plan is None:
+            return None
+
+    pc_lay, photo_lay = compute_design_geometry(
+        angle, aoi_geom, ui.crs_vct, Bx, By, len_along, len_across,
+        ui.spinBoxExceedExtremeStrips.value(), ui.spinBoxMultipleBase.value(),
+        altitude_ASL, adaptive_plan=adaptive_plan
     )
     pc_lay.setCrs(QgsCoordinateReferenceSystem(ui.epsg_code))
     photo_lay.setCrs(QgsCoordinateReferenceSystem(ui.epsg_code))
@@ -36,7 +112,8 @@ def process_block_mode(ui, Bx, By, len_along, len_across, altitude_ASL):
     dist = sqrt((len_along / 2) ** 2 + (len_across / 2) ** 2)
     return pc_lay, photo_lay, theta, dist
 
-def process_corridor_mode(ui, Bx, By, len_along, len_across, altitude_ASL):
+def process_corridor_mode(ui, Bx, By, len_along, len_across, altitude_ASL,
+                          altitude_AGL=None):
     """Get projection centres and photos layer from Corridor line"""
     if ui.CorLine and ui.CorLine.crs().isValid():
         ui.crs_vct = ui.CorLine.crs()
@@ -59,6 +136,13 @@ def process_corridor_mode(ui, Bx, By, len_along, len_across, altitude_ASL):
         'DISSOLVE': False,
         'OUTPUT': 'TEMPORARY_OUTPUT'
     })['OUTPUT']
+
+    if ui.checkBoxIncreaseOverlap.isChecked() and altitude_AGL is not None:
+        factor = _corridor_factor(ui, buffered_exp_lines, altitude_ASL, altitude_AGL)
+        if factor is None:
+            return None
+        Bx = Bx * factor
+        By = By * factor
 
     feats_exp_lines = exploded_lines.getFeatures()
     pc_lay_list, photo_lay_list, line_buf_list = [], [], []

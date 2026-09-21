@@ -4,7 +4,7 @@ from qgis.PyQt.QtWidgets import QMessageBox
 
 def QgsTraceback():
     """Display traceback errors in QGIS console log"""
-    QgsMessageLog.logMessage('\n' + traceback.format_exc(), 'Flight Planner', Qgis.Critical)
+    QgsMessageLog.logMessage('\n' + traceback.format_exc(), 'QFlightPlanner', Qgis.Critical)
 
 def QgsPrint(text="Error in process", level="Critical"):
     """Display user-defined message in QGIS console log"""
@@ -19,9 +19,9 @@ def QgsPrint(text="Error in process", level="Critical"):
     else:
         qgis_level = Qgis.Info
 
-    QgsMessageLog.logMessage(text, 'Flight Planner', qgis_level)
+    QgsMessageLog.logMessage(text, 'QFlightPlanner', qgis_level)
 
-def QgsMessBox(title="Flight Planner", text="Information", level="Information"):
+def QgsMessBox(title="QFlightPlanner", text="Information", level="Information"):
     """Show message box with user-defined title and message"""
     if level == "Information":
         QMessageBox.information(None, title, text)

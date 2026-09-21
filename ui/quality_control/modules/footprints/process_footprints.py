@@ -26,10 +26,10 @@ def process_footprints(worker):
         transf_rst_vct = Transformer.from_crs(
             worker.crs_rst, worker.crs_vct, always_xy=True)
 
-    Z_srtm = worker.raster.GetRasterBand(1).ReadAsArray()
-    nodata = worker.raster.GetRasterBand(1).GetNoDataValue()
-    rst_array = np.ma.masked_equal(Z_srtm, nodata)
-    Z_min = np.nanmin(rst_array)
+    band = worker.raster.GetRasterBand(1)
+    Z_min = band.GetMinimum()
+    if Z_min is None:
+        Z_min, _ = band.ComputeRasterMinMax(False)
 
     uplx_r, xres_r, xskew_r, uply_r, yskew_r, yres_r = worker.raster.GetGeoTransform()
 

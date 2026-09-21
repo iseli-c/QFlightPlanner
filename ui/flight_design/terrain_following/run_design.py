@@ -28,6 +28,7 @@ def run_design_terrain_following(ui):
             'pointLayer': pc_lay,
             'crsVectorLayer': ui.crs_vct,
             'raster': dtm_raster,
+            'DTM': ui.DTM,
             'polygonLayer': photo_lay,
             'crsRasterLayer': ui.crs_rst,
             'tolerance': ui.doubleSpinBoxTolerance.value(),

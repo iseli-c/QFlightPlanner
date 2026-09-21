@@ -7,7 +7,8 @@ def clip_raster(ds, xyf, R, Xs, Ys, Zs, Z_min, trans_v_r, crs_rst, crs_vct):
      is derived from photo's Exterior Orientation Parameters, camera parameters
      and minimum height of DTM"""
 
-    DTM_array = ds.GetRasterBand(1).ReadAsArray()
+    DTM_band = ds.GetRasterBand(1)
+    raster_width, raster_height = ds.RasterXSize, ds.RasterYSize
     focal = xyf[0, 2]
     img_corners = np.vstack(([0, 0, focal], xyf))
 
@@ -43,14 +44,19 @@ def clip_raster(ds, xyf, R, Xs, Ys, Zs, Z_min, trans_v_r, crs_rst, crs_vct):
     if upper_left_c < 0:
         upper_left_c = 0
 
-    if bottom_right_r > DTM_array.shape[0]:
-        bottom_right_r = DTM_array.shape[0]
-    if bottom_right_c > DTM_array.shape[1]:
-        bottom_right_c = DTM_array.shape[1]
+    if bottom_right_r >= raster_height:
+        bottom_right_r = raster_height - 1
+    if bottom_right_c >= raster_width:
+        bottom_right_c = raster_width - 1
+
+    if bottom_right_r < upper_left_r or bottom_right_c < upper_left_c:
+        raise ValueError("Photo footprint does not overlap the DTM.")
 
     x0, y0 = pixel2crs(ds.GetGeoTransform(), upper_left_c, upper_left_r)
-    clipped_DTM = np.array(DTM_array[upper_left_r: bottom_right_r+1,
-                           upper_left_c: bottom_right_c+1])
+    clipped_DTM = np.array(DTM_band.ReadAsArray(
+        upper_left_c, upper_left_r,
+        bottom_right_c - upper_left_c + 1,
+        bottom_right_r - upper_left_r + 1))
     updated_geotransform = list(ds.GetGeoTransform())
     updated_geotransform[0] = x0
     updated_geotransform[3] = y0

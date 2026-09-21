@@ -18,12 +18,11 @@ from qgis.core import (
     QgsCoordinateReferenceSystem
 )
 
-from qgis.PyQt.QtWidgets import QApplication
-
 from ....mathgeo_utils.coordinates import (
     crs2pixel,
     transf_coord
 )
+from ...dtm_window import DtmWindow
 from ...terrain_utils import z_at_3d_line, simplify_profile
 
 from ....geoprocessing_utils import create_waypoints_layer, create_flight_line, change_layer_style
@@ -40,6 +39,7 @@ class WorkerTerrain(QObject):
         self.layer = data.get('pointLayer')
         self.crs_vct = data.get('crsVectorLayer')
         self.raster = data.get('raster')
+        self.DTM = data.get('DTM')
         self.layer_pol = data.get('polygonLayer')
         self.crs_rst = data.get('crsRasterLayer')
         self.tolerance = data.get('tolerance')
@@ -64,8 +64,6 @@ class WorkerTerrain(QObject):
                     self.handle_cancel()
                     return
 
-                QApplication.processEvents()
-
                 strip_proj_centres = [f for f in proj_cent_list if int(f[0]) == strip_nr]
                 pc_coords = np.array([(f[-1].asPoint().x(), f[-1].asPoint().y()) for f in strip_proj_centres])
 
@@ -74,7 +72,7 @@ class WorkerTerrain(QObject):
                 )
 
                 waypoint_nr = self.create_flight_profile_waypoints(
-                    pc_z, simplified_profile, strip_proj_centres, DTM_array, geotransf, waypoint_nr, pr
+                    pc_z, simplified_profile, strip_proj_centres, DTM_array, geotransf, waypoint_nr, pr, strip_nr
                 )
                 waypoints_layer.updateExtents()
                 if step == 0 or progress_c % step == 0:
@@ -98,13 +96,16 @@ class WorkerTerrain(QObject):
         self.enabled.emit(True)
 
     def prepare_raster_data(self):
-        geotransf = self.raster.GetGeoTransform()
-        raster_array = self.raster.GetRasterBand(1).ReadAsArray()
-        nodata = self.raster.GetRasterBand(1).GetNoDataValue()
-        DTM_array = np.ma.masked_equal(raster_array, nodata)
+        bbox = self.layer.extent()
+        bbox.combineExtentWith(self.layer_pol.extent())
+        bbox.grow(max(bbox.width(), bbox.height()) * 0.1 + 1.0)
+        window = DtmWindow.from_layer(self.DTM, bbox, bbox_crs=self.crs_vct)
 
-        pix_width = geotransf[1]
-        pix_height = -geotransf[5]
+        geotransf = window.geotransform
+        DTM_array = window.array
+
+        pix_width = abs(geotransf[1])
+        pix_height = abs(geotransf[5])
 
         if self.crs_rst != self.crs_vct:
             transf_vct_rst = Transformer.from_crs(self.crs_vct, self.crs_rst, always_xy=True)
@@ -167,8 +168,14 @@ class WorkerTerrain(QObject):
         prf_c, prf_r = crs2pixel(geotransf, prf_x_rst, prf_y_rst)
         pc_c, pc_r = crs2pixel(geotransf, pc_x_rst, pc_y_rst)
 
-        profile_z = DTM_array[prf_r.astype(int), prf_c.astype(int)]
-        pc_z = DTM_array[pc_r.astype(int), pc_c.astype(int)]
+        height, width = DTM_array.shape
+        prf_r = np.clip(prf_r.astype(int), 0, height - 1)
+        prf_c = np.clip(prf_c.astype(int), 0, width - 1)
+        pc_r = np.clip(pc_r.astype(int), 0, height - 1)
+        pc_c = np.clip(pc_c.astype(int), 0, width - 1)
+
+        profile_z = DTM_array[prf_r, prf_c]
+        pc_z = DTM_array[pc_r, pc_c]
 
         profile_coords = np.column_stack((profile_x, profile_y, profile_z))
         profile_coords = list(map(list, profile_coords.reshape((-1, 3))))
@@ -176,10 +183,12 @@ class WorkerTerrain(QObject):
         
         return simplified_profile, pc_z
 
-    def create_flight_profile_waypoints(self, pc_z, simplified_profile, strip_proj_centres, DTM_array, geotransf, waypoint_nr, pr):
+    def create_flight_profile_waypoints(self, pc_z, simplified_profile, strip_proj_centres, DTM_array, geotransf, waypoint_nr, pr, strip_nr):
         waypoints_coords = [w[:2] + [w[2] + self.altitude_AGL] for w in simplified_profile]
 
         strip_proj_centres = [f_pc + [pc_z[e]] for e, f_pc in enumerate(strip_proj_centres)]
+        s_nr = f"{strip_nr:04d}"
+        changes = {}
 
         for i in range(len(waypoints_coords) - 1):
             start_w, end_w = waypoints_coords[i], waypoints_coords[i + 1]
@@ -190,7 +199,7 @@ class WorkerTerrain(QObject):
             feat_waypnt = QgsFeature()
             feat_waypnt.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(waypoint_x, waypoint_y)))
             feat_waypnt.setAttributes([waypoint_nr, round(waypoint_x, 2), round(waypoint_y, 2),
-                                    round(waypoint_ASL, 2), waypoint_AGL])
+                                    round(waypoint_ASL, 2), waypoint_AGL, s_nr])
             pr.addFeature(feat_waypnt)
 
             for proj_centre in strip_proj_centres:
@@ -202,18 +211,23 @@ class WorkerTerrain(QObject):
                     id = int(proj_centre[2])
                     new_ASL = float(z_at_3d_line((pc_x, pc_y), start_w, end_w))
                     new_AGL = new_ASL - pc_z_ground
-                    self.layer.startEditing()
-                    self.layer.changeAttributeValue(id, 4, round(new_ASL, 2))
-                    self.layer.changeAttributeValue(id, 5, round(new_AGL, 2))
-                    self.layer.commitChanges()
+                    changes[id] = (round(new_ASL, 2), round(new_AGL, 2))
             waypoint_nr += 1
 
         end_w = waypoints_coords[-1]
         feat_waypnt = QgsFeature()
         feat_waypnt.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(end_w[0], end_w[1])))
         feat_waypnt.setAttributes([waypoint_nr, round(end_w[0], 2), round(end_w[1], 2),
-                                round(end_w[-1], 2), round(self.altitude_AGL, 2)])
+                                round(end_w[-1], 2), round(self.altitude_AGL, 2), s_nr])
         pr.addFeature(feat_waypnt)
+
+        if changes:
+            self.layer.startEditing()
+            for feature_id, (asl, agl) in changes.items():
+                self.layer.changeAttributeValue(feature_id, 4, asl)
+                self.layer.changeAttributeValue(feature_id, 5, agl)
+            self.layer.commitChanges()
+
         return waypoint_nr + 1
     
     def finalize_layers(self, waypoints_layer, result):

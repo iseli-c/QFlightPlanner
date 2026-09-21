@@ -22,6 +22,16 @@ and sets flight direction. The results are 4 layers: projection centers of photo
 (with attribute table containing External Orientation parameters), photos (size at mean terrain height),
 waypoints and flight line.
 
+   Terrain minimum and maximum heights are computed automatically from the selected DTM
+whenever the area of interest, corridor line, buffer or tab changes; there is no separate
+"Update Heights from DTM" action. In 'One Altitude ASL For Entire Flight' mode the flight
+altitude is referenced to the lowest terrain elevation, so the requested GSD is achieved
+there and bettered everywhere else. With the adaptive overlap option enabled, line and
+photo spacing follow the local terrain so the specified front/side overlap is maintained
+at every elevation; if the relief is too large to keep the overlap, the design is aborted
+with an explanatory message. The live preview can optionally apply the same adaptive
+layout via the "Adaptive spacing in preview" checkbox.
+
 
 2. Quality control panel for assessment of the flight (project or already done) in the form of output:
    - vector layer of real photos coverage (footprint),

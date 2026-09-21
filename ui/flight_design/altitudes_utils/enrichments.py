@@ -1,30 +1,38 @@
-from qgis.core import QgsPointXY
-from pyproj import Transformer
+import numpy as np
+
+from ...dtm_window import DtmWindow
+
 
 def enrich_projection_centres_with_agl(ui, pc_lay):
     """Enrich projection centres layer with altitude AGL"""
-    if not hasattr(ui, 'DTM'):
+    if not hasattr(ui, 'DTM') or ui.DTM is None:
         return
 
-    if ui.crs_rst != ui.crs_vct:
-        crs_from = ui.crs_vct.authid()
-        crs_to = ui.crs_rst.authid()
+    asl_field = pc_lay.fields().indexOf('Alt. ASL [m]')
+    agl_field = pc_lay.fields().indexOf('Alt. AGL [m]')
 
-        if not crs_to:
-            crs_to = ui.crs_rst.toWkt()
-        
-        transf_vct_rst = Transformer.from_crs(crs_from, crs_to, always_xy=True)
+    bbox = pc_lay.extent()
+    window = DtmWindow.from_layer(ui.DTM, bbox, bbox_crs=ui.crs_vct)
 
-    feats = pc_lay.getFeatures()
+    ids, xs, ys, asls = [], [], [], []
+    for f in pc_lay.getFeatures():
+        point = f.geometry().asPoint()
+        ids.append(f.id())
+        xs.append(point.x())
+        ys.append(point.y())
+        asls.append(f.attribute(asl_field))
+
+    if not ids:
+        ui.progressBar.setValue(70)
+        return
+
+    terrain_heights = window.sample(np.array(xs), np.array(ys), src_crs=ui.crs_vct)
+
     pc_lay.startEditing()
-    for f in feats:
-        x, y = f.geometry().asPoint().x(), f.geometry().asPoint().y()
-        if ui.crs_rst != ui.crs_vct:
-            x, y = transf_vct_rst.transform(x, y)
-
-        altitude_ASL_f = f.attribute('Alt. ASL [m]')
-        terrain_height, _ = ui.DTM.dataProvider().sample(QgsPointXY(x, y), 1)
-        altitude_AGL_f = altitude_ASL_f - terrain_height
-        pc_lay.changeAttributeValue(f.id(), 5, round(altitude_AGL_f, 2))
+    for feature_id, altitude_asl, terrain_height in zip(ids, asls, terrain_heights):
+        if np.isnan(terrain_height) or altitude_asl is None:
+            continue
+        pc_lay.changeAttributeValue(feature_id, agl_field,
+                                    round(altitude_asl - terrain_height, 2))
     pc_lay.commitChanges()
     ui.progressBar.setValue(70)

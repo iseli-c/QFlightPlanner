@@ -46,7 +46,7 @@ class FlightPlanner:
             QCoreApplication.installTranslator(self.translator)
 
         self.actions = []
-        self.menu = self.tr(u'&Flight Planner')
+        self.menu = self.tr(u'&QFlightPlanner')
 
         #self.first_start = None
         self.dlg = None
@@ -89,7 +89,7 @@ class FlightPlanner:
         return action
 
     def initGui(self):
-        icon_path = ':/plugins/flight_planner_wut/icon.png'
+        icon_path = ':/plugins/QFlightPlanner/icon.png'
         self.add_action(
             icon_path,
             text=self.tr(u'Plan flight'),
@@ -101,7 +101,7 @@ class FlightPlanner:
     def unload(self):
         for action in self.actions:
             self.iface.removePluginMenu(
-                self.tr(u'&Flight Planner'),
+                self.tr(u'&QFlightPlanner'),
                 action)
             self.iface.removeToolBarIcon(action)
         if self.dlg:
@@ -111,5 +111,5 @@ class FlightPlanner:
         if self.dlg:
             self.dlg.close()
             
-        self.dlg = FlightPlannerDialog()
+        self.dlg = FlightPlannerDialog(self.iface)
         self.dlg.show()

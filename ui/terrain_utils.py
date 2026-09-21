@@ -1,10 +1,8 @@
-from qgis.core import QgsVectorLayer
-from qgis.analysis import QgsZonalStatistics
-from qgis import processing
-from math import ceil, fabs, isnan
+from math import ceil, fabs
 from pyproj import Transformer
+from qgis import processing
 from ..mathgeo_utils.coordinates import transf_coord
-from ..error_reporting import QgsMessBox
+from .dtm_window import DtmWindow, raster_extent_contains
 
 
 def create_buffer_around_line(path_line, gdal_ds, dtm_layer, buffer_value):
@@ -37,59 +35,26 @@ def create_buffer_around_line(path_line, gdal_ds, dtm_layer, buffer_value):
     out = processing.run("native:buffer", params)["OUTPUT"]
     return out, min_buf
 
-def check_raster_values_on_polygon(raster_layer, polygon_geom):
-    """Verifies that the raster has valid values inside the AoI."""
-    extent = polygon_geom.boundingBox()
-    band = 1
 
-    provider = raster_layer.dataProvider()
-    block = provider.block(band, extent, int(extent.width()), int(extent.height()))
+def aoi_within_dtm(vlayer, dtm_layer):
+    """Verify that the whole vector layer lies within the DTM extent and has valid data.
 
-    for row in range(block.height()):
-        for col in range(block.width()):
-            val = block.value(col, row)
-            if val is None or (isinstance(val, float) and isnan(val)):
-                raise ValueError("Raster contains None or NaN values within the polygon AoI.")
-            
-def is_poligon_inside_raster(vlayer, dtm_layer):
-    """Verifies whether all features in a vector layer are fully inside the extent of a raster"""
-    params_calc = {
-        'INPUT_A': dtm_layer,
-        'BAND_A': 1,
-        'FORMULA': '1',
-        'OUTPUT': 'TEMPORARY_OUTPUT',
-        'RTYPE': 0,
-        'NO_DATA': None,
-        'EXTENT': 'ignore'
-    }
-    raster_ones = processing.run("gdal:rastercalculator", params_calc)['OUTPUT']
-    
-    params_polygonize = {
-        'INPUT': raster_ones,
-        'BAND': 1,
-        'FIELD': 'DN',
-        'OUTPUT': 'TEMPORARY_OUTPUT'
-    }
-    raster_polygon = processing.run("gdal:polygonize", params_polygonize)['OUTPUT']
-    
-    raster_polygon_layer = QgsVectorLayer(raster_polygon, "raster_polygon", "ogr")
-    
-    raster_geom = None
-    for feat in raster_polygon_layer.getFeatures():
-        geom = feat.geometry()
-        raster_geom = geom if raster_geom is None else raster_geom.combine(geom)
+    This is a cheap extent comparison (plus a small windowed nodata sanity check)
+    that replaces the former whole-raster polygonization. Raises ValueError with a
+    user-facing message; callers running on the GUI thread are responsible for
+    presenting it.
+    """
+    bbox = vlayer.extent()
+    if not raster_extent_contains(dtm_layer, bbox, bbox_crs=vlayer.crs()):
+        raise ValueError("AoI does not lie entirely\nwithin the extent of the DTM data.")
 
-    features_outside = []
-    for f in vlayer.getFeatures():
-        if not raster_geom.contains(f.geometry()):
-            features_outside.append(f.id())
-    
-    if features_outside:
-        message = "AoI does not lie entirely\nwithin the extent of the DTM data."
-        QgsMessBox(title="AoI not in DTM", text=message, level="Critical")
-        raise ValueError(message)
+    try:
+        window = DtmWindow.from_layer(dtm_layer, bbox, bbox_crs=vlayer.crs(),
+                                      max_pixels=1_000_000)
+        window.minmax()
+    except ValueError:
+        raise ValueError("The DTM contains no valid data\nwithin the Area of Interest.")
 
-    return list(vlayer.getFeatures())
 
 def z_at_3d_line(pnt, start_pnt, end_pnt):
     """Return "z" coordinate for point with known x,y
@@ -129,35 +94,24 @@ def simplify_profile(vertices, epsilon):
 
     return results
 
-def clipped_raster_minmax(vlayer, dtm_layer):
-    """Calculates minimum and maximum elevation values from DTM"""
-    features_inside = is_poligon_inside_raster(vlayer, dtm_layer)
-    temp_layer = QgsVectorLayer(f"Polygon?crs={vlayer.crs().authid()}", "temp", "memory")
-    temp_layer.dataProvider().addFeatures(features_inside)
-    
-    stats = QgsZonalStatistics(
-        temp_layer, 
-        dtm_layer,
-        "pre_",
-        1,
-        QgsZonalStatistics.Min | QgsZonalStatistics.Max
-    )
-    
-    if stats.calculateStatistics(None) != 0:
-        raise RuntimeError("Error in calculating stats.")
 
-    gmin, gmax = None, None
-    for f in temp_layer.getFeatures():
-        try:
-            mn, mx = float(f["pre_min"]), float(f["pre_max"])
-            gmin = mn if gmin is None or mn < gmin else gmin
-            gmax = mx if gmax is None or mx > gmax else gmax
-        except:
-            continue
-    
-    if gmin is None or gmax is None:
-        raise ValueError("Could not determine min/max values from raster.")
-    
-    return gmin, gmax
+def clipped_raster_minmax(vlayer, dtm_layer, max_pixels=50_000_000):
+    """Calculates minimum and maximum elevation values from the DTM within a vector layer.
 
+    Only the window covering the vector layer extent is read (windowed raster access),
+    and a mask is built by rasterizing the geometry so that the statistics respect the
+    polygon boundary.
+    """
+    aoi_within_dtm(vlayer, dtm_layer)
 
+    bbox = vlayer.extent()
+    window = DtmWindow.from_layer(dtm_layer, bbox, bbox_crs=vlayer.crs(),
+                                  max_pixels=max_pixels)
+
+    geometry = None
+    for feature in vlayer.getFeatures():
+        geom = feature.geometry()
+        geometry = geom if geometry is None else geometry.combine(geom)
+
+    mask = window.mask_for_geometry(geometry, src_crs=vlayer.crs()) if geometry else None
+    return window.minmax(mask)
